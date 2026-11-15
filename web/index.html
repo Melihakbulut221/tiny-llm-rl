@@ -1,0 +1,436 @@
+<title>Ödülle Öğrenen Model</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a lab bench. The live instrument (episode tape + learning curve) sits directly under a short
+   headline; everything below it is reference material in one reading column. Mono type carries the
+   model's own strings; a 1/0 reward box is the single recurring mark. */
+:root{
+  --bg:#f2f5f4; --surface:#ffffff; --ink:#13201d; --ink2:#44524e; --muted:#6c7a76; --line:#d5dcd9; --wash:#e7ecea;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100;
+  --good:#0b6b4b; --good-bg:#d7efe5; --bad:#8a8f8d;
+  --display:"Bricolage Grotesque","IBM Plex Sans",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e1413; --surface:#151d1b; --ink:#e7eeec; --ink2:#b9c5c1; --muted:#8a9995; --line:#27322f; --wash:#1b2523;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+  --good:#7fd9b6; --good-bg:#143a2d; --bad:#6d7a76; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1413; --surface:#151d1b; --ink:#e7eeec; --ink2:#b9c5c1; --muted:#8a9995; --line:#27322f; --wash:#1b2523;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+  --good:#7fd9b6; --good-bg:#143a2d; --bad:#6d7a76; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:400 16px/1.55 var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px 72px}
+.wrap{max-width:1060px;margin:0 auto;display:flex;flex-direction:column;gap:36px}
+h1{font:600 clamp(30px,5vw,46px)/1.08 var(--display);letter-spacing:-.02em;margin:0;text-wrap:balance;max-width:17em}
+h2{font:600 19px/1.25 var(--display);letter-spacing:-.01em;margin:0}
+p{margin:0}
+.lede{color:var(--ink2);max-width:62ch;font-size:17px}
+.head{display:flex;flex-direction:column;gap:14px}
+.mono{font-family:var(--mono)}
+.small{font-size:13.5px;color:var(--muted)}
+.num{font-variant-numeric:tabular-nums}
+
+/* controls */
+.controls{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;border-block:1px solid var(--line);padding-block:14px}
+.seg{display:flex;border:1px solid var(--ink);border-radius:4px;overflow:hidden}
+.seg label{position:relative;cursor:pointer}
+.seg input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.seg span{display:block;padding:7px 14px;font-size:14.5px;font-weight:500;border-left:1px solid var(--ink)}
+.seg label:first-child span{border-left:0}
+.seg input:checked+span{background:var(--ink);color:var(--bg)}
+.seg input:focus-visible+span{outline:2px solid var(--s1);outline-offset:-3px}
+.btn{font:500 14.5px var(--body);padding:8px 16px;border-radius:4px;border:1px solid var(--ink);background:var(--ink);color:var(--bg);cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink)}
+.btn:focus-visible{outline:2px solid var(--s1);outline-offset:2px}
+.btn:disabled{opacity:.45;cursor:default}
+.status{margin-left:auto;font-size:14px;color:var(--ink2);text-align:right}
+.status b{font-weight:500;color:var(--ink)}
+.modehint{color:var(--ink2);font-size:14.5px;max-width:70ch;margin-top:-22px}
+.meter{height:3px;background:var(--line);margin-top:-30px}
+.meter i{display:block;height:100%;width:0;background:var(--ink)}
+.notice{border:1px solid var(--line);background:var(--surface);padding:12px 14px;border-radius:4px;font-size:14.5px;color:var(--ink2)}
+
+/* instrument */
+.bench{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:36px;align-items:start}
+.panel{display:flex;flex-direction:column;gap:10px;min-width:0}
+.tape{background:var(--surface);border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.ep{display:grid;grid-template-columns:3.6em minmax(0,1.25fr) minmax(0,1fr) 22px;gap:10px;align-items:center;padding:6px 12px;border-top:1px solid var(--wash);font:400 13.5px/1.4 var(--mono)}
+.ep:first-child{border-top:0}
+.ep .t{font:500 11px var(--body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.ep .o{color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ep .p{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ep.new{animation:in .7s ease-out}
+@keyframes in{from{background:var(--wash)}}
+@media (prefers-reduced-motion:reduce){.ep.new{animation:none}}
+.rw{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:3px;font:500 12px var(--mono);border:1px solid var(--bad);color:var(--bad)}
+.rw.one{background:var(--good-bg);border-color:var(--good);color:var(--good)}
+
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px 18px}
+.stat{display:flex;flex-direction:column;gap:1px;border-top:3px solid var(--c);padding-top:7px;min-width:0}
+.stat .k{font-size:13px;color:var(--ink2);line-height:1.3}
+.stat .v{font:500 24px/1.15 var(--mono);letter-spacing:-.02em}
+.stat .d{font-size:12.5px;color:var(--muted)}
+.chart{position:relative}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.chart text{font-family:var(--body)}
+.tip{position:absolute;top:6px;pointer-events:none;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:7px 10px;font-size:12.5px;white-space:nowrap;z-index:2;box-shadow:0 6px 18px rgba(0,0,0,.12)}
+.tip b{display:block;font-weight:600;margin-bottom:2px}
+.tip div{display:flex;align-items:center;gap:6px}
+.sw{width:9px;height:9px;border-radius:2px;flex:none}
+
+/* reference sections */
+.cols{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);gap:36px;align-items:start}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{text-align:left;font:500 11.5px var(--body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:0 14px 8px 0;border-bottom:1px solid var(--ink);white-space:nowrap}
+td{padding:7px 14px 7px 0;border-bottom:1px solid var(--line);font-family:var(--mono);white-space:nowrap}
+td .rw{margin-left:8px;vertical-align:middle}
+td.miss{color:var(--muted)}
+.ask{display:flex;flex-direction:column;gap:12px}
+.askrow{display:flex;gap:8px;flex-wrap:wrap}
+select,input[type=text]{font:400 15px var(--mono);padding:8px 10px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--ink);min-width:0}
+select{font-family:var(--body)}
+input[type=text]{flex:1 1 9em}
+select:focus-visible,input[type=text]:focus-visible{outline:2px solid var(--s1);outline-offset:1px}
+.ans{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 14px;font-size:14.5px;align-items:center}
+.ans dt{color:var(--muted)}.ans dd{margin:0;font-family:var(--mono);overflow-wrap:anywhere}
+.prose{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px;border-top:1px solid var(--line);padding-top:28px}
+.prose div{display:flex;flex-direction:column;gap:6px}
+.prose p{color:var(--ink2);font-size:15px}
+.prose h2{font-size:16px}
+@media (max-width:820px){
+  .bench,.cols{grid-template-columns:minmax(0,1fr)}
+  .prose{grid-template-columns:minmax(0,1fr)}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 18px}
+  .status{margin-left:0;text-align:left;width:100%}
+  .seg span{padding:7px 11px}
+}
+</style>
+
+<div class="wrap" lang="tr">
+  <header class="head">
+    <h1>Bu model şu anda sizin tarayıcınızda öğreniyor</h1>
+    <p class="lede">344 bin parametreli bir dil modeli sıralama, ters çevirme ve toplama sorularına cevap deniyor.
+    Doğru cevabı hiç görmüyor. Her denemeden sonra aldığı tek bilgi bir ödül: cevap doğruysa 1, değilse 0.</p>
+  </header>
+
+  <div class="controls">
+    <div class="seg" role="radiogroup" aria-label="Eğitim ayarı">
+      <label><input type="radio" name="mode" id="mode-stable" value="stable" checked><span>Kararlı</span></label>
+      <label><input type="radio" name="mode" id="mode-risky" value="risky"><span>Riskli</span></label>
+      <label><input type="radio" name="mode" id="mode-anchor" value="anchor"><span>Çapalı</span></label>
+    </div>
+    <button class="btn" id="toggle" disabled>Duraklat</button>
+    <button class="btn ghost" id="restart" disabled>Baştan başlat</button>
+    <div class="status num" id="status">Model yükleniyor…</div>
+  </div>
+  <div class="meter" aria-hidden="true"><i id="meter"></i></div>
+  <p class="modehint" id="modehint"></p>
+  <div class="notice" id="notice" hidden></div>
+
+  <section class="bench">
+    <div class="panel">
+      <h2>Son denemeler</h2>
+      <p class="small">Modelin az önce ürettiği cevaplar ve doğrulayıcının verdiği ödül.</p>
+      <div class="tape" id="tape" aria-live="off"></div>
+    </div>
+    <div class="panel">
+      <h2>Sınav sonucu</h2>
+      <p class="small">Her 25 adımda, görev başına 64 sabit soruda tam doğru cevap oranı.</p>
+      <div class="stats" id="stats"></div>
+      <div class="chart" id="chart"></div>
+    </div>
+  </section>
+
+  <section class="cols">
+    <div class="panel">
+      <h2>Aynı sekiz soru, eğitimden önce ve şimdi</h2>
+      <div class="scroll"><table>
+        <thead><tr><th>Soru</th><th>Doğru cevap</th><th>Eğitimden önce</th><th>Şimdi</th></tr></thead>
+        <tbody id="fixed"></tbody>
+      </table></div>
+    </div>
+    <div class="panel ask">
+      <h2>Kendiniz sorun</h2>
+      <div class="askrow">
+        <select id="ask-task" aria-label="Görev">
+          <option value="S">Sırala</option><option value="R">Ters çevir</option><option value="A">Topla</option>
+        </select>
+        <input type="text" id="ask-input" value="9280417" autocomplete="off" spellcheck="false" aria-label="Soru">
+      </div>
+      <p class="small" id="ask-help"></p>
+      <dl class="ans" id="ask-ans"></dl>
+    </div>
+  </section>
+
+  <section class="prose">
+    <div><h2>Ne izliyorsunuz</h2>
+      <p>Model önce çoğunlukla kolay sorularla eğitildi; uzun sorularda yarım yamalak. Burada yalnızca uzun sorular soruluyor.
+      Model her adımda 128 soruya rastgele cevap deniyor; ödül alan cevapların olasılığı artırılıyor (REINFORCE).
+      Hesaplamanın tamamı sizin cihazınızda yapılıyor, bu yüzden her izleyicinin koşusu farklıdır.</p></div>
+    <div><h2>Ne beklemeli</h2>
+      <p>Uzun sıralama birkaç yüz adımda %40 civarından %90'ın üstüne çıkar, ters çevirme hızla %100'e varır.
+      Uzun toplama %0'da kalır: model orada neredeyse hiç doğru cevap üretemediği için ödüllendirilecek bir şey yoktur.
+      Ödül, var olan beceriyi güçlendirir; sıfırdan beceri üretmez.</p></div>
+    <div><h2>Üç ayar</h2>
+      <p><b>Kararlı</b> ayar düşük öğrenme oranı kullanır. <b>Riskli</b> ayarda oran üç katıdır ve model birkaç yüz adım sonra
+      tüm görevlerde birden %0'a çökebilir; ölçümlerimizde üç koşudan ikisinde böyle oldu. <b>Çapalı</b> ayar aynı yüksek oranı,
+      modeli başlangıç hâline yakın tutan bir cezayla birlikte kullanır: çökmez ama daha yavaş ilerler.</p></div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.22.0/tf.min.js"></script>
+<script>
+"use strict";
+/* ---------- vocabulary & tasks (mirrors tinyrl.py) ---------- */
+const CH="0123456789abcdefghij+=:ARS", EOS=26, PAD=27, V=28, D=96, NH=4, NL=3, MAXPOS=28;
+const TFIX=22, MAXANS=10, STEPS=1500, EVAL_EVERY=25, EVAL_N=64;
+const enc=s=>Array.from(s,c=>CH.indexOf(c));
+const EASY={add:[1,2],rev:[2,5],sort:[2,5]}, HARD={add:[3,4],rev:[6,9],sort:[6,9]};
+const TASKS=["add","rev","sort"];
+const TNAME={A:"Topla",R:"Çevir",S:"Sırala"};
+const MODES={
+  stable:{lr:1e-4,kl:0.1,hint:"Makaledeki varsayılan ayar: öğrenme oranı 0,0001 ve modeli başlangıç hâline hafifçe bağlayan bir ceza."},
+  risky:{lr:3e-4,kl:0,hint:"Öğrenme oranı üç katı, bağlayıcı ceza yok. Model hızlı öğrenir ama birkaç yüz adım sonra tümden çökebilir."},
+  anchor:{lr:3e-4,kl:1.0,hint:"Aynı yüksek öğrenme oranı, güçlü bağlayıcı ceza ile. Çökmez; sıralama daha yavaş iyileşir."}};
+const SERIES=[["sort_hard","Sıralama, uzun","--s1"],["rev_hard","Ters çevirme, uzun","--s2"],["add_hard","Toplama, uzun","--s3"],["add_easy","Toplama, kısa","--s4"]];
+/* mean of 3 seeds, default config, from the paper's runs (every 150 steps) */
+const PAPER_SORT=[37.1,79.7,85.7,89.6,91.1,93.3,92.1,94.7,96.3,95.4,96.9];
+
+function rngOf(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const ri=(r,lo,hi)=>lo+Math.floor(r()*(hi-lo+1));
+function sampleTask(task,r,hard){
+  const [lo,hi]=(hard?HARD:EASY)[task], n=ri(r,lo,hi);
+  if(task==="add"){const m=ri(r,lo,hi),a=ri(r,n>1?10**(n-1):0,10**n-1),b=ri(r,m>1?10**(m-1):0,10**m-1);return[`A:${a}+${b}=`,String(a+b)]}
+  let s="";const al=task==="rev"?"abcdefghij":"0123456789";
+  for(let i=0;i<n;i++)s+=al[Math.floor(r()*10)];
+  return task==="rev"?[`R:${s}=`,[...s].reverse().join("")]:[`S:${s}=`,[...s].sort().join("")];
+}
+function answerOf(p){
+  const b=p.slice(2,-1);
+  if(p[0]==="A"){const[a,c]=b.split("+");return String(+a+ +c)}
+  return p[0]==="R"?[...b].reverse().join(""):[...b].sort().join("");
+}
+
+/* ---------- model ---------- */
+let chartW=0;addEventListener("resize",()=>{const w=$("chart").clientWidth;if(w!==chartW){chartW=w;drawChart()}});
+const SPEC=[["tok",[V,D]],["pos",[MAXPOS,D]]];
+for(let l=0;l<NL;l++)SPEC.push([`g1_${l}`,[D]],[`b1_${l}`,[D]],[`g2_${l}`,[D]],[`b2_${l}`,[D]],[`Wi_${l}`,[D,3*D]],[`bi_${l}`,[3*D]],
+  [`Wo_${l}`,[D,D]],[`bo_${l}`,[D]],[`W1_${l}`,[D,4*D]],[`c1_${l}`,[4*D]],[`W2_${l}`,[4*D,D]],[`c2_${l}`,[D]]);
+SPEC.push(["g",[D]],["b",[D]],["head",[D,V]]);
+function build(buf,trainable){
+  const P={},list=[];let o=0;
+  for(const[n,sh]of SPEC){const k=sh.reduce((a,b)=>a*b,1),t=tf.tensor(buf.subarray(o,o+k),sh);o+=k;
+    if(trainable){P[n]=tf.variable(t,true,"p_"+n);list.push(P[n]);t.dispose()}else P[n]=t}
+  P.list=list;return P;
+}
+function reset(P,buf){let o=0;tf.tidy(()=>{for(const[n,sh]of SPEC){const k=sh.reduce((a,b)=>a*b,1);P[n].assign(tf.tensor(buf.subarray(o,o+k),sh));o+=k}})}
+const masks={};
+function maskOf(T){if(!masks[T]){const m=new Float32Array(T*T);for(let i=0;i<T;i++)for(let j=i+1;j<T;j++)m[i*T+j]=-1e9;masks[T]=tf.keep(tf.tensor2d(m,[T,T]))}return masks[T]}
+function ln(x,g,b){const{mean,variance}=tf.moments(x,-1,true);return x.sub(mean).div(variance.add(1e-5).sqrt()).mul(g).add(b)}
+const gelu=x=>x.mul(0.5).mul(tf.erf(x.mul(Math.SQRT1_2)).add(1));
+function forward(P,x){
+  const[B,T]=x.shape,dh=D/NH,heads=t=>t.reshape([B,T,NH,dh]).transpose([0,2,1,3]);
+  let h=tf.gather(P.tok,x).add(P.pos.slice([0,0],[T,D]));
+  for(let l=0;l<NL;l++){
+    const a=ln(h,P["g1_"+l],P["b1_"+l]).reshape([B*T,D]).matMul(P["Wi_"+l]).add(P["bi_"+l]);
+    const[q,k,v]=tf.split(a,3,1).map(heads);
+    const att=tf.softmax(tf.matMul(q,k,false,true).mul(1/Math.sqrt(dh)).add(maskOf(T)),-1);
+    const o=tf.matMul(att,v).transpose([0,2,1,3]).reshape([B*T,D]).matMul(P["Wo_"+l]).add(P["bo_"+l]).reshape([B,T,D]);
+    h=h.add(o);
+    const m=gelu(ln(h,P["g2_"+l],P["b2_"+l]).reshape([B*T,D]).matMul(P["W1_"+l]).add(P["c1_"+l])).matMul(P["W2_"+l]).add(P["c2_"+l]).reshape([B,T,D]);
+    h=h.add(m);
+  }
+  return ln(h,P.g,P.b).reshape([B*T,D]).matMul(P.head).reshape([B,T,V]);
+}
+async function generate(P,prompts,greedy,r){
+  const B=prompts.length,x=new Int32Array(B*TFIX).fill(PAD),cur=new Int32Array(B),start=new Int32Array(B),done=new Uint8Array(B);
+  prompts.forEach((p,i)=>{enc(p).forEach((t,j)=>x[i*TFIX+j]=t);cur[i]=start[i]=p.length});
+  for(let s=0;s<MAXANS;s++){
+    const lt=tf.tidy(()=>forward(P,tf.tensor2d(x,[B,TFIX],"int32"))),lg=await lt.data();lt.dispose();
+    let all=true;
+    for(let i=0;i<B;i++){
+      if(done[i])continue;
+      const o=(i*TFIX+cur[i]-1)*V;let tok=0;
+      if(greedy){for(let k=1;k<V-1;k++)if(lg[o+k]>lg[o+tok])tok=k}
+      else{let mx=-1e30;for(let k=0;k<V-1;k++)if(lg[o+k]>mx)mx=lg[o+k];
+        let z=0;for(let k=0;k<V-1;k++)z+=Math.exp(lg[o+k]-mx);
+        let u=r()*z;tok=V-2;for(let k=0;k<V-1;k++){u-=Math.exp(lg[o+k]-mx);if(u<=0){tok=k;break}}}
+      x[i*TFIX+cur[i]]=tok;cur[i]++;
+      if(tok===EOS||cur[i]>=TFIX)done[i]=1;else all=false;
+    }
+    if(all)break;
+  }
+  const outs=[];
+  for(let i=0;i<B;i++){let s="";for(let p=start[i];p<cur[i];p++){const t=x[i*TFIX+p];if(t!==EOS)s+=CH[t]}outs.push(s)}
+  return{x,start,cur,outs};
+}
+
+/* ---------- training state ---------- */
+const S={ready:false,running:false,runId:0,step:0,mode:"stable",evals:[],tape:[],before:null,rate:0,B:128,loop:null,cpu:false};
+let W0,P,REF,opt,rng,base,testSet,fixedSet;
+function makeSets(){
+  const r=rngOf(12345);testSet=[];
+  for(const[key,task,hard]of[["sort_hard","sort",true],["rev_hard","rev",true],["add_hard","add",true],["add_easy","add",false]])
+    for(let i=0;i<EVAL_N;i++){const[p,a]=sampleTask(task,r,hard);testSet.push({key,p,a})}
+  const f=rngOf(7);fixedSet=[];
+  for(const[t,h,n]of[["sort",true,3],["rev",true,2],["add",true,1],["add",false,2]])for(let i=0;i<n;i++){const[p,a]=sampleTask(t,f,h);fixedSet.push({p,a})}
+}
+async function evaluate(step){
+  const all=testSet.concat(fixedSet),g=await generate(P,all.map(e=>e.p),true);
+  const acc={};SERIES.forEach(s=>acc[s[0]]=0);
+  testSet.forEach((e,i)=>{if(g.outs[i]===e.a)acc[e.key]+=100/EVAL_N});
+  const fixed=fixedSet.map((e,i)=>g.outs[testSet.length+i]);
+  if(step===0)S.before=fixed;
+  S.evals.push({step,acc,fixed});
+}
+async function trainStep(){
+  const B=S.B,{lr,kl}=MODES[S.mode],ps=[],gold=[],tag=[];
+  for(let i=0;i<B;i++){const t=TASKS[Math.floor(rng()*3)],[p,a]=sampleTask(t,rng,true);ps.push(p);gold.push(a);tag.push(t)}
+  const g=await generate(P,ps,false,rng);
+  const r=g.outs.map((o,i)=>o===gold[i]?1:0),adv=r.map((v,i)=>v-base[tag[i]]);
+  for(const t of TASKS){let s=0,n=0;tag.forEach((tt,i)=>{if(tt===t){s+=r[i];n++}});if(n)base[t]=0.9*base[t]+0.1*s/n}
+  const Wt=new Float32Array(B*TFIX*V),M=new Float32Array(B*TFIX);let nM=0;
+  for(let i=0;i<B;i++)for(let p=g.start[i];p<g.cur[i];p++){Wt[(i*TFIX+p-1)*V+g.x[i*TFIX+p]]=adv[i]/B;M[i*TFIX+p-1]=1;nM++}
+  tf.tidy(()=>{
+    const xT=tf.tensor2d(g.x,[B,TFIX],"int32"),W=tf.tensor3d(Wt,[B,TFIX,V]),Mt=tf.tensor3d(M,[B,TFIX,1]);
+    const rl=kl>0?tf.logSoftmax(forward(REF,xT),-1):null;
+    const{grads}=tf.variableGrads(()=>{
+      const lp=tf.logSoftmax(forward(P,xT),-1);
+      let loss=tf.sum(lp.mul(W)).neg();
+      if(rl)loss=loss.add(tf.sum(tf.exp(lp).mul(lp.sub(rl)).mul(Mt)).mul(kl/nM));
+      return loss},P.list);
+    const names=Object.keys(grads),norm=tf.sqrt(tf.addN(names.map(n=>tf.sum(tf.square(grads[n])))));
+    const scale=tf.minimum(tf.scalar(1),tf.scalar(1).div(norm.add(1e-6))),cl={};
+    names.forEach(n=>cl[n]=grads[n].mul(scale));
+    opt.applyGradients(cl);
+  });
+  S.step++;
+  for(const t of ["S","R","A"]){const i=ps.findIndex(p=>p[0]===t);if(i>=0)S.tape.unshift({p:ps[i],o:g.outs[i],r:r[i],id:S.step+t})}
+  S.tape.length=Math.min(S.tape.length,12);
+}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function loop(id){
+  let last=performance.now(),lastUI=0;
+  while(S.running&&id===S.runId&&S.step<STEPS){
+    await trainStep();
+    if(id!==S.runId)break;
+    const now=performance.now();S.rate=S.rate?0.9*S.rate+0.1*1000/(now-last):1000/(now-last);last=now;
+    if(S.step%4===0&&S.step<=16&&S.rate&&S.rate<0.7&&S.B>32){S.B/=2;S.rate=0;
+      $("notice").hidden=false;$("notice").textContent=`Bu cihazda hesaplama yavaş ilerliyor; her adımda ${S.B} soru denenecek şekilde küçültüldü. Sonuçlar biraz daha gürültülü olabilir.`}
+    if(S.step%EVAL_EVERY===0){await evaluate(S.step);if(id!==S.runId)break;renderEval()}
+    if(now-lastUI>450){lastUI=now;renderTape()}
+    renderStatus();
+    await sleep(0);
+  }
+  if(id===S.runId&&S.step>=STEPS){S.running=false;renderStatus();renderTape()}
+}
+async function startRun(){
+  S.runId++;S.running=false;if(S.loop)await S.loop;
+  reset(P,W0);if(opt)opt.dispose();
+  opt=tf.train.adam(MODES[S.mode].lr,0.9,0.999,1e-8);
+  if(!S.cpu){S.B=128;$("notice").hidden=true}
+  rng=rngOf((Math.random()*2**31)|0);base={add:0,rev:0,sort:0};
+  S.step=0;S.evals=[];S.tape=[];S.rate=0;S.before=null;
+  renderStatus();
+  await evaluate(0);renderEval();renderTape();askNow();
+  S.running=true;S.loop=loop(S.runId);renderStatus();
+}
+
+/* ---------- rendering ---------- */
+const $=id=>document.getElementById(id);
+const pct=v=>"%"+v.toFixed(1).replace(".",",");
+const rw=ok=>`<span class="rw${ok?" one":""}" title="${ok?"ödül 1":"ödül 0"}">${ok?1:0}</span>`;
+const esc=s=>s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+function renderStatus(){
+  $("meter").style.width=100*S.step/STEPS+"%";
+  const done=S.step>=STEPS;
+  $("toggle").textContent=S.running?"Duraklat":done?"Bitti":"Devam et";
+  $("toggle").disabled=!S.ready||done;$("restart").disabled=!S.ready;
+  if(!S.ready)return;
+  const sp=S.rate?` · saniyede ${S.rate.toFixed(1).replace(".",",")} adım`:"";
+  $("status").innerHTML=done?`<b>${STEPS} adım tamamlandı</b>`:`<b>Adım ${S.step}</b> / ${STEPS}${S.running?sp:" · duraklatıldı"}`;
+}
+let seen=new Set();
+function renderTape(){
+  if(!S.tape.length){$("tape").innerHTML=`<div class="ep"><span class="t"></span><span class="p" style="color:var(--muted);font-family:var(--body)">İlk denemeler bekleniyor…</span><span></span><span></span></div>`;return}
+  $("tape").innerHTML=S.tape.map(e=>`<div class="ep${seen.has(e.id)?"":" new"}"><span class="t">${TNAME[e.p[0]]}</span><span class="p">${e.p}</span><span class="o">${esc(e.o)||"(boş)"}</span>${rw(e.r)}</div>`).join("");
+  seen=new Set(S.tape.map(e=>e.id));
+}
+function renderEval(){
+  const f=S.evals[0],l=S.evals[S.evals.length-1];
+  $("stats").innerHTML=SERIES.map(s=>{
+    if(!l)return`<div class="stat" style="--c:var(${s[2]})"><span class="k">${s[1]}</span><span class="v">–</span><span class="d">&nbsp;</span></div>`;
+    return`<div class="stat" style="--c:var(${s[2]})"><span class="k">${s[1]}</span><span class="v num">${pct(l.acc[s[0]])}</span><span class="d num">başta ${pct(f.acc[s[0]])}</span></div>`}).join("");
+  if(l)$("fixed").innerHTML=fixedSet.map((e,i)=>{const b=S.before[i],n=l.fixed[i];
+    return`<tr><td>${e.p}</td><td>${e.a}</td><td class="${b===e.a?"":"miss"}">${esc(b)||"(boş)"}${rw(b===e.a)}</td><td class="${n===e.a?"":"miss"}">${esc(n)||"(boş)"}${rw(n===e.a)}</td></tr>`}).join("");
+  drawChart();
+}
+function drawChart(){
+  const el=$("chart"),Wd=Math.max(280,Math.round(el.clientWidth)||620),H=Math.round(Math.min(320,Math.max(230,Wd*.5))),L=30,R=8,T=10,Bm=30;
+  const X=s=>L+(Wd-L-R)*s/STEPS,Y=v=>T+(H-T-Bm)*(1-v/100);
+  let g="";
+  for(const v of[0,25,50,75,100])g+=`<line x1="${L}" x2="${Wd-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L-7}" y="${Y(v)+4}" text-anchor="end" font-size="11.5" fill="var(--muted)">${v}</text>`;
+  for(const s of[0,300,600,900,1200,1500])g+=`<text x="${X(s)}" y="${H-10}" text-anchor="${s===1500?"end":s===0?"start":"middle"}" font-size="11.5" fill="var(--muted)">${s===1500?"1500 adım":s}</text>`;
+  if(S.mode==="stable"){
+    g+=`<polyline fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="2 4" stroke-linecap="round" points="${PAPER_SORT.map((v,i)=>X(i*150)+","+Y(v)).join(" ")}"/>`;
+    g+=`<text x="${X(1500)}" y="${Y(78)}" text-anchor="end" font-size="11.5" fill="var(--muted)">makaledeki ortalama (sıralama)</text>`;
+  }
+  SERIES.forEach(s=>{const p=S.evals.map(e=>[e.step,e.acc[s[0]]]);if(!p.length)return;
+    g+=`<polyline fill="none" stroke="var(${s[2]})" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="${p.map(q=>X(q[0]).toFixed(1)+","+Y(q[1]).toFixed(1)).join(" ")}"/>`;
+    const q=p[p.length-1];g+=`<circle cx="${X(q[0])}" cy="${Y(q[1])}" r="4" fill="var(${s[2]})" stroke="var(--bg)" stroke-width="2"/>`});
+  g+=`<line id="xh" y1="${T}" y2="${H-Bm}" stroke="var(--muted)" stroke-width="1" visibility="hidden"/>`;
+  el.innerHTML=`<svg viewBox="0 0 ${Wd} ${H}" role="img" aria-label="Eğitim adımına göre tam doğru cevap oranı">${g}<rect x="${L}" y="${T}" width="${Wd-L-R}" height="${H-T-Bm}" fill="transparent"/></svg><div class="tip" hidden></div>`;
+  const svg=el.firstChild,tip=el.lastChild,xh=svg.querySelector("#xh");
+  svg.onpointermove=ev=>{
+    if(!S.evals.length)return;
+    const bb=svg.getBoundingClientRect(),st=((ev.clientX-bb.left)/bb.width*Wd-L)/(Wd-L-R)*STEPS;
+    let e=S.evals[0];for(const c of S.evals)if(Math.abs(c.step-st)<Math.abs(e.step-st))e=c;
+    const px=X(e.step);xh.setAttribute("x1",px);xh.setAttribute("x2",px);xh.setAttribute("visibility","visible");
+    tip.innerHTML=`<b>Adım ${e.step}</b>`+SERIES.map(s=>`<div><i class="sw" style="background:var(${s[2]})"></i>${s[1]}: <span class="num">${pct(e.acc[s[0]])}</span></div>`).join("");
+    tip.hidden=false;const left=px/Wd*bb.width;tip.style.left=(left>bb.width*.55?left-tip.offsetWidth-12:left+12)+"px"};
+  svg.onpointerleave=()=>{tip.hidden=true;xh.setAttribute("visibility","hidden")};
+}
+
+/* ---------- ask your own ---------- */
+const HELP={S:["2–9 rakam yazın, örneğin 9280417",/^\d{2,9}$/,"9280417"],R:["a–j harflerinden 2–9 tane yazın, örneğin dheagib",/^[a-j]{2,9}$/,"dheagib"],A:["En çok 4 basamaklı iki sayı yazın, örneğin 607+4818",/^\d{1,4}\+\d{1,4}$/,"607+4818"]};
+let askSeq=0;
+async function askNow(){
+  const t=$("ask-task").value,v=$("ask-input").value.trim(),[help,re]=HELP[t];
+  $("ask-help").textContent=help+".";
+  if(!S.ready)return;
+  if(!re.test(v)){$("ask-ans").innerHTML=`<dt>Soru</dt><dd style="font-family:var(--body);color:var(--muted)">Bu görev için geçerli bir soru değil.</dd>`;return}
+  const p=`${t}:${v}=`,a=answerOf(p),me=++askSeq;
+  const b=(await generate(REF,[p],true)).outs[0],n=(await generate(P,[p],true)).outs[0];
+  if(me!==askSeq)return;
+  $("ask-ans").innerHTML=`<dt>Soru</dt><dd>${p}</dd><dt>Doğru cevap</dt><dd>${a}</dd><dt>Eğitimden önce</dt><dd>${esc(b)||"(boş)"} ${rw(b===a)}</dd><dt>Şimdi (adım ${S.step})</dt><dd>${esc(n)||"(boş)"} ${rw(n===a)}</dd>`;
+}
+let askT;const askSoon=()=>{clearTimeout(askT);askT=setTimeout(askNow,250)};
+$("ask-input").addEventListener("input",askSoon);
+$("ask-task").addEventListener("change",()=>{$("ask-input").value=HELP[$("ask-task").value][2];askNow()});
+
+/* ---------- controls & boot ---------- */
+function setMode(){S.mode=document.querySelector("input[name=mode]:checked").value;$("modehint").textContent=MODES[S.mode].hint}
+document.querySelectorAll("input[name=mode]").forEach(i=>i.addEventListener("change",()=>{setMode();if(S.ready)startRun()}));
+$("toggle").onclick=()=>{if(S.step>=STEPS)return;S.running=!S.running;if(S.running)S.loop=loop(S.runId);else askNow();renderStatus()};
+$("restart").onclick=()=>startRun();
+function fail(msg){$("notice").hidden=false;$("notice").textContent=msg;$("status").textContent="Başlatılamadı"}
+async function boot(){
+  setMode();renderEval();renderTape();drawChart();askNow();
+  if(!window.tf)return fail("Hesaplama kitaplığı yüklenemedi. Bağlantınızı kontrol edip sayfayı yenileyin.");
+  let ok=false;try{ok=await tf.setBackend("webgl")}catch(e){}
+  if(!ok){await tf.setBackend("cpu");S.cpu=true;S.B=24;
+    $("notice").hidden=false;$("notice").textContent="Bu tarayıcıda grafik hızlandırma (WebGL) kullanılamıyor. Eğitim küçük gruplarla ve yavaş ilerleyecek; sonuçlar daha gürültülü olabilir."}
+  await tf.ready();
+  let buf;try{const r=await fetch("weights.txt");if(!r.ok)throw 0;const s=atob((await r.text()).trim()),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);buf=u.buffer}catch(e){return fail("Model dosyası indirilemedi. Sayfayı yenileyin.")}
+  W0=new Float32Array(buf);P=build(W0,true);REF=build(W0,false);makeSets();
+  S.ready=true;window.lab={tf,forward,REF,P,S,generate};
+  await startRun();
+}
+boot().catch(e=>fail("Beklenmeyen bir hata oluştu: "+e.message));
+</script>

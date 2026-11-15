@@ -1,0 +1,10 @@
+__pycache__/
+*.aux
+*.log
+*.out
+nohup.out
+# fine-tuned checkpoints are reproducible with run_all.sh; only the pretrained base models are kept
+runs/*.pt
+!runs/base_s*.pt
+runs/trials/*.pt
+web/weights.bin

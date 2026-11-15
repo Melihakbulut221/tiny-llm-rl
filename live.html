@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Küçük LLM · Canlı PÖ Eğitimi</title>
+<style>
+:root{--bg:#f7f6f2;--card:#fff;--ink:#1a1a19;--ink2:#55544e;--muted:#8a897f;--line:#e4e3dc;
+ --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--good:#006300;--bad:#b3261e;--accent:#2a78d6}
+@media (prefers-color-scheme:dark){:root{--bg:#121211;--card:#1a1a19;--ink:#f0efec;--ink2:#c3c2b7;--muted:#8f8e85;
+ --line:#2e2e2b;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--good:#4cc24c;--bad:#f0807a;--accent:#3987e5}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1040px;margin:0 auto;padding:24px 16px 48px}
+h1{font-size:22px;margin:0 0 4px;letter-spacing:-.01em}
+h2{font-size:14px;margin:0 0 2px;font-weight:600}
+p{margin:0}.sub{color:var(--ink2);max-width:70ch}
+.hint{color:var(--muted);font-size:13px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:18px 0 14px}
+button{font:inherit;font-size:14px;padding:7px 12px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+button:hover{border-color:var(--muted)}
+button[aria-pressed=true]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.status{margin-left:auto;display:flex;align-items:center;gap:8px;color:var(--ink2);font-size:14px;font-variant-numeric:tabular-nums}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}
+.dot.on{background:var(--s3);animation:pulse 1.4s infinite}
+@keyframes pulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.dot.on{animation:none}}
+.prog{height:4px;background:var(--line);border-radius:2px;overflow:hidden;margin-bottom:16px}
+.prog i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.tile .k{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink2)}
+.sw{width:10px;height:10px;border-radius:3px;flex:none}
+.tile .v{font-size:28px;font-weight:650;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.tile .d{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.grid{display:grid;grid-template-columns:1.5fr 1fr;gap:12px}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px;color:var(--ink2);margin:6px 0 4px}
+.legend span{display:flex;align-items:center;gap:6px}
+.chart{position:relative}
+svg{display:block;width:100%;height:auto;overflow:visible}
+.tip{position:absolute;pointer-events:none;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:12.5px;
+ box-shadow:0 4px 14px rgba(0,0,0,.12);display:none;white-space:nowrap;font-variant-numeric:tabular-nums;z-index:2}
+.tip b{display:block;margin-bottom:2px}.tip div{display:flex;align-items:center;gap:6px}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;font-weight:600;color:var(--ink2);font-size:12.5px;padding:6px 10px 6px 0;border-bottom:1px solid var(--line)}
+td{padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap}
+td.ok{color:var(--good);font-weight:600}td.no{color:var(--bad);font-weight:600}
+td.flash{animation:fl .9s}@keyframes fl{from{background:color-mix(in srgb,var(--accent) 25%,transparent)}}
+.note{margin-top:14px}
+@media (max-width:760px){.tiles{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.status{margin-left:0;width:100%}}
+</style>
+</head>
+<body>
+<main>
+<h1>Küçük bir dil modeli ödülle öğreniyor — canlı</h1>
+<p class="sub">344 bin parametreli bir transformer şu anda bu sunucuda pekiştirmeli öğrenmeyle (REINFORCE) eğitiliyor.
+Modele doğru cevap gösterilmiyor; yalnızca ürettiği cevabın doğru olup olmadığı (1 ya da 0) söyleniyor.</p>
+
+<div class="bar" role="group" aria-label="Senaryo">
+  <button data-mode="stable" aria-pressed="false">Kararlı (öo 1e-4, KL 0,1)</button>
+  <button data-mode="collapse" aria-pressed="false">Riskli (öo 3e-4, KL yok)</button>
+  <button data-mode="anchor" aria-pressed="false">Çapalı (öo 3e-4, KL 1,0)</button>
+  <div class="status"><span class="dot" id="dot"></span><span id="status">bağlanıyor…</span></div>
+</div>
+<div class="prog"><i id="prog"></i></div>
+
+<div class="tiles" id="tiles"></div>
+
+<div class="grid">
+  <div class="card">
+    <h2>Test doğruluğu</h2>
+    <p class="hint">Açgözlü kod çözme, tam eşleşme (%), görev başına 100 sabit istem</p>
+    <div class="legend" id="lg1"></div>
+    <div class="chart" id="c1"></div>
+  </div>
+  <div class="card">
+    <h2>Eğitim sırasında ödül</h2>
+    <p class="hint">Örneklenen cevapların doğru çıkma oranı (%), zor örnekler</p>
+    <div class="legend" id="lg2"></div>
+    <div class="chart" id="c2"></div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:12px">
+  <h2>Modelin şu anki cevapları</h2>
+  <p class="hint">Aynı sekiz istem her 25 adımda yeniden soruluyor</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Görev</th><th>İstem</th><th>Beklenen</th><th>Modelin cevabı</th><th>Sonuç</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table></div>
+</div>
+
+<p class="hint note">Senaryo düğmeleri eğitimi bu sayfayı izleyen herkes için yeniden başlatır. Koşu bitince 45 saniye sonra
+kendiliğinden yeniden başlar. «Riskli» senaryoda model her zaman çökmez: makaledeki üç koşudan ikisinde çökmüştü.
+Zor toplama ödülle iyileşmez; bu beklenen bir sonuçtur.</p>
+</main>
+
+<script>
+const SER1=[["sort_hard","Sıralama (zor)","--s1"],["rev_hard","Ters çevirme (zor)","--s2"],["add_hard","Toplama (zor)","--s3"],["add_easy","Toplama (kolay)","--s4"]];
+const SER2=[["sort","Sıralama","--s1"],["rev","Ters çevirme","--s2"],["add","Toplama","--s3"]];
+const TASKNAME={A:"Toplama",R:"Ters çevirme",S:"Sıralama"};
+const MODENAME={stable:"Kararlı",collapse:"Riskli",anchor:"Çapalı"};
+const $=id=>document.getElementById(id);
+let S={steps:1500,mode:"",evals:[],rewards:[],done:false,step:0};
+const fmt=v=>v.toFixed(1).replace(".",",");
+
+function legend(el,ser){el.innerHTML=ser.map(s=>`<span><i class="sw" style="background:var(${s[2]})"></i>${s[1]}</span>`).join("")}
+legend($("lg1"),SER1);legend($("lg2"),SER2);
+
+function chart(el,ser,pts,get,smooth){
+  const W=560,H=250,L=34,R=12,T=8,B=26,xm=S.steps;
+  const X=s=>L+(W-L-R)*s/xm,Y=v=>T+(H-T-B)*(1-v/100);
+  let g="";
+  for(const v of [0,25,50,75,100])g+=`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${L-6}" y="${Y(v)+4}" text-anchor="end" font-size="11" fill="var(--muted)">${v}</text>`;
+  for(const s of [0,500,1000,1500])g+=`<text x="${X(s)}" y="${H-8}" text-anchor="middle" font-size="11" fill="var(--muted)">${s}</text>`;
+  g+=`<text x="${W-R}" y="${H-8}" text-anchor="end" font-size="11" fill="var(--muted)" dx="-28">adım</text>`;
+  const data=ser.map(s=>{
+    let p=pts.map(e=>[e.step,get(e)[s[0]]]);
+    if(smooth)p=p.map((q,i)=>{const a=p.slice(Math.max(0,i-smooth+1),i+1);return[q[0],a.reduce((t,z)=>t+z[1],0)/a.length]});
+    return p});
+  data.forEach((p,i)=>{if(!p.length)return;
+    g+=`<polyline fill="none" stroke="var(${ser[i][2]})" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="${p.map(q=>X(q[0]).toFixed(1)+","+Y(q[1]).toFixed(1)).join(" ")}"/>`;
+    const l=p[p.length-1];g+=`<circle cx="${X(l[0])}" cy="${Y(l[1])}" r="4" fill="var(${ser[i][2]})" stroke="var(--card)" stroke-width="2"/>`});
+  g+=`<line id="x" y1="${T}" y2="${H-B}" stroke="var(--muted)" stroke-dasharray="3 3" visibility="hidden"/>`;
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img">${g}<rect x="${L}" y="${T}" width="${W-L-R}" height="${H-T-B}" fill="transparent"/></svg><div class="tip"></div>`;
+  const svg=el.firstChild,tip=el.lastChild,xl=svg.querySelector("#x");
+  svg.onmousemove=ev=>{
+    if(!data[0].length)return;
+    const r=svg.getBoundingClientRect(),sx=(ev.clientX-r.left)/r.width*W,st=(sx-L)/(W-L-R)*xm;
+    let k=0;data[0].forEach((q,i)=>{if(Math.abs(q[0]-st)<Math.abs(data[0][k][0]-st))k=i});
+    const px=X(data[0][k][0]);xl.setAttribute("x1",px);xl.setAttribute("x2",px);xl.setAttribute("visibility","visible");
+    tip.innerHTML=`<b>Adım ${data[0][k][0]}</b>`+ser.map((s,i)=>`<div><i class="sw" style="background:var(${s[2]})"></i>${s[1]}: %${fmt(data[i][k][1])}</div>`).join("");
+    tip.style.display="block";
+    const left=px/W*r.width;tip.style.left=(left>r.width*0.6?left-tip.offsetWidth-10:left+10)+"px";tip.style.top="8px"};
+  svg.onmouseleave=()=>{tip.style.display="none";xl.setAttribute("visibility","hidden")};
+}
+
+function tiles(){
+  const f=S.evals[0],l=S.evals[S.evals.length-1];
+  $("tiles").innerHTML=SER1.map(s=>{
+    if(!l)return`<div class="card tile"><div class="k"><i class="sw" style="background:var(${s[2]})"></i>${s[1]}</div><div class="v">–</div><div class="d">&nbsp;</div></div>`;
+    const d=l.acc[s[0]]-f.acc[s[0]];
+    return`<div class="card tile"><div class="k"><i class="sw" style="background:var(${s[2]})"></i>${s[1]}</div><div class="v">%${fmt(l.acc[s[0]])}</div><div class="d">başlangıç %${fmt(f.acc[s[0]])} · ${d>=0?"+":"−"}${fmt(Math.abs(d))} puan</div></div>`}).join("");
+}
+let prev=[];
+function rows(){
+  const l=S.evals[S.evals.length-1];if(!l)return;
+  $("rows").innerHTML=l.samples.map((s,i)=>{
+    const ch=prev[i]!==undefined&&prev[i]!==s.o;
+    return`<tr><td style="font-family:inherit">${TASKNAME[s.p[0]]}</td><td>${s.p}</td><td>${s.a}</td><td class="${ch?"flash":""}">${s.o||"(boş)"}</td><td class="${s.ok?"ok":"no"}" style="font-family:inherit">${s.ok?"✓ doğru":"✗ yanlış"}</td></tr>`}).join("");
+  prev=l.samples.map(s=>s.o);
+}
+function status(){
+  document.querySelectorAll("button[data-mode]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.mode===S.mode));
+  $("prog").style.width=(100*S.step/S.steps)+"%";
+  $("dot").className="dot"+(S.done?"":" on");
+  $("status").textContent=S.done?`${MODENAME[S.mode]} koşu bitti · birazdan yeniden başlayacak`:`${MODENAME[S.mode]||""} · adım ${S.step} / ${S.steps}`;
+}
+let dirty=false;
+function render(){dirty=false;status();tiles();rows();
+  chart($("c1"),SER1,S.evals,e=>e.acc,0);chart($("c2"),SER2,S.rewards,e=>e.r,5)}
+function on(e){
+  if(e.t==="start"){S={steps:e.steps,mode:e.mode,evals:[],rewards:[],done:false,step:0};prev=[]}
+  else if(e.t==="eval"){S.evals.push(e);S.step=Math.max(S.step,e.step)}
+  else if(e.t==="reward"){S.rewards.push(e);S.step=Math.max(S.step,e.step)}
+  else if(e.t==="done"){S.done=true}
+  if(!dirty){dirty=true;requestAnimationFrame(render)}
+}
+function connect(){
+  const es=new EventSource("events");
+  es.onmessage=m=>on(JSON.parse(m.data));
+  es.onerror=()=>{$("dot").className="dot";$("status").textContent="bağlantı koptu, yeniden deneniyor…"};
+}
+document.querySelectorAll("button[data-mode]").forEach(b=>b.onclick=()=>fetch("start?mode="+b.dataset.mode));
+render();connect();
+</script>
+</body>
+</html>
